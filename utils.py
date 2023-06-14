@@ -5,7 +5,7 @@ session = boto3.Session() # add support of keys
 ec2_client = session.client('ec2', region_name='us-east-1')
 
 
-def create_ec2(security_group_id, image_id, instance_type, user_data, die_on_shutdown=False, wait=True):
+def create_ec2(security_group_id, image_id, instance_type, user_data, instance_name, die_on_shutdown=False, wait=True):
     instance = ec2_client.run_instances(
         ImageId=image_id,
         MinCount=1,
@@ -14,6 +14,17 @@ def create_ec2(security_group_id, image_id, instance_type, user_data, die_on_shu
         SecurityGroupIds=[security_group_id],
         UserData=user_data,
         InstanceInitiatedShutdownBehavior='terminate' if die_on_shutdown else 'stop',
+        TagSpecifications=[
+            {
+                'ResourceType': 'instance',
+                'Tags': [
+                    {
+                        'Key': 'Name',
+                        'Value': instance_name
+                    },
+                ]
+            },
+        ],
         KeyName='shahartest'   # TODO: delete
     )
 
