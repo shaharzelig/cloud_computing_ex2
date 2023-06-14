@@ -1,7 +1,7 @@
 #!flask/bin/python
 import os
 import sys
-
+import itertools
 import requests
 
 def doWork(buffer, iterations):
@@ -16,26 +16,39 @@ def bye():
     while True:
         os.system("sudo shutdown -h now")
 
+def send_response_to_all_managers(managers, response):
+    for manager_url in managers:
+        requests.post(manager_url + '/pushResult', data=response)
+
+
+def get_task(manager_urls):
+    for manager_url in itertools.cycle(manager_urls):
+        response = requests.get(manager_url + '/getwork')
+
+        if response.status_code == 400:
+            bye()
+
+        if response.status_code == 204: # No content. No work to do.
+            continue
+
+        buffer = response.content
+        try:
+            iterations = int(response.headers.get('X-Iterations'))
+
+        # A bad response, let's not stop everything because of that.
+        except Exception as e:
+            continue
+
+        yield buffer, iterations
+
 
 def main(args):
-    managers_urls = args.split(",")
-    while True:
-        for manager_url in managers_urls:
-            response = requests.get(manager_url + '/getwork')
-            if response.status_code == 400:
-                bye()
+    for buffer, iterations in get_task(args):
+        result = doWork(buffer, iterations)
 
-            if response.status_code == 204: # No content. No work to do.
-                continue
-
-            buffer = response.content
-            iterations = int(response.headers.get('X-Iterations'))
-            result = doWork(buffer, iterations)
-
-            # Publish result to everyone
-            for manager_url in managers_urls:
-                requests.post(manager_url + '/pushResult', data=result)
+        # Publish result to everyone
+        send_response_to_all_managers(args, result)
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main(sys.argv[1:])
