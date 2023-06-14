@@ -1,4 +1,5 @@
 #!flask/bin/python
+import threading
 import time
 import queue
 import boto3 as boto3
@@ -8,15 +9,23 @@ from flask import Flask, jsonify, abort, request
 import argparse
 from collections import deque
 from utils import create_ec2
-
+import logging
 app = Flask(__name__)
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s [%(levelname)s] %(message)s',
+                    handlers=[logging.StreamHandler()])
+
 RESULTS = queue.Queue()
 JOBS = queue.Queue()
 BAD_THREASHOLD_BEFORE_SPAWN = 1
 GOOD_THREASHOLD_BEFORE_KILL = 0.1
 NUMBER_OF_INTERVALS_TO_KEEP = 10
 MANAGER_INTERVAL = 10
-SECURITY_GROUP = ""
+SECURITY_GROUP = None
+
+MIN_NUMBER_OF_WORKERS = 2
+MAX_NUMBER_OF_WORKERS = 10
 
 get_work_history = deque(maxlen=NUMBER_OF_INTERVALS_TO_KEEP)
 
@@ -40,12 +49,22 @@ WORKER_USER_DATA = '''#!/bin/bash
 
 
 def spawn_worker():
-    workers_security_group = ""
-    WORKERS.append(create_ec2(workers_security_group, 'ami-02396cdd13e9a1257', 't2.micro',
-                              WORKER_USER_DATA % ",".join(SIBLINGS)))
+    app.logger.info("Spawning new worker")
+    if len(WORKERS) >= MAX_NUMBER_OF_WORKERS:
+        app.logger.info("Can't spawn more workers, reached max number of workers %d" %
+                        MAX_NUMBER_OF_WORKERS)
+        return
+
+    WORKERS.append(create_ec2(SECURITY_GROUP, 'ami-02396cdd13e9a1257', 't2.micro',
+                              WORKER_USER_DATA % ",".join(SIBLINGS), instance_name="worker"))
 
 
 def kill_worker():
+    if len(WORKERS) <= MIN_NUMBER_OF_WORKERS:
+        app.logger.info("Can't kill more workers, reached min number of workers %d" %
+                        MIN_NUMBER_OF_WORKERS)
+        return
+    app.logger.info("Killing worker")
     worker_to_kill = WORKERS.pop()
     ipv4 = worker_to_kill['Instances'][0]['PrivateIpAddress']
     killing_list.append(ipv4)
@@ -62,10 +81,17 @@ def compute_avg():
 
 
 def workers_manager():
+    app.logger.info("Starting workers manager")
     while True:
         time.sleep(MANAGER_INTERVAL)
+        app.logger.info("Checking if need to spawn or kill workers")
         avg = compute_avg()
-        if avg > BAD_THREASHOLD_BEFORE_SPAWN:
+        if len(WORKERS) < MIN_NUMBER_OF_WORKERS:
+            app.logger.info("Not enough workers (existing %d, min %d), spawning new worker"
+                            % (len(WORKERS), MIN_NUMBER_OF_WORKERS))
+            spawn_worker()
+
+        elif avg > BAD_THREASHOLD_BEFORE_SPAWN:
             spawn_worker()  # This method should block until new worker is spawned and working.
 
         elif avg < GOOD_THREASHOLD_BEFORE_KILL:
@@ -73,11 +99,12 @@ def workers_manager():
 
 @app.route('/enqueue', methods=['PUT'])
 def enqueue():
-    iterations = int(request.args.get('iterations'))
-    if not iterations:
+    try:
+        iterations = int(request.args.get('iterations'))
+    except:
         return abort(400, 'iterations must be provided')
     JOBS.put_nowait((request.data, iterations))
-    return 200
+    return "Success", 200
 
 
 @app.route('/getwork', methods=['GET'])
@@ -138,4 +165,6 @@ if __name__ == '__main__':
         print('security-group must be provided')
         exit(1)
     SECURITY_GROUP = args.security_group
+    t = threading.Thread(target=workers_manager)
+    t.start()
     app.run(host='0.0.0.0', port=80)
