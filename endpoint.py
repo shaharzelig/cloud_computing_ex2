@@ -33,6 +33,8 @@ WORKERS = []
 killing_list = []
 SIBLINGS = []
 
+# Change in worker also
+PORT_KNOCKING_WITH_WORKER = 5000
 
 def get_results(n):
     results_to_return = []
@@ -62,7 +64,8 @@ def spawn_worker():
         return
 
     WORKERS.append(create_ec2(SECURITY_GROUP, 'ami-02396cdd13e9a1257', 't2.micro',
-                              WORKER_USER_DATA % get_ip_address(), instance_name="worker"))
+                              WORKER_USER_DATA % get_ip_address(), instance_name="worker",
+                              check_for_remote_port=PORT_KNOCKING_WITH_WORKER))
 
 def kill_worker():
     if len(WORKERS) <= MIN_NUMBER_OF_WORKERS:
@@ -114,6 +117,7 @@ def enqueue():
         iterations = int(request.args.get('iterations'))
     except:
         return abort(400, 'iterations must be provided')
+
     JOBS.put_nowait((request.data, iterations))
     return jsonify({"status": "success"}), 200
 

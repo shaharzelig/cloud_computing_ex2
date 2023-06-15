@@ -1,5 +1,6 @@
 #!flask/bin/python
 import os
+import socket
 import sys
 import itertools
 import time
@@ -12,7 +13,7 @@ logging.basicConfig(level=logging.INFO,
                     filename='worker.log')
 logger = logging.getLogger(__name__)
 TIME_TO_SLEEP_BETWEEN_TASK_REQUESTS = 1
-
+PORT_KNOCKING_WITH_MANAGER = 5000
 def doWork(buffer, iterations):
     import hashlib
     output = hashlib.sha512(buffer).digest()
@@ -59,7 +60,18 @@ def get_managers(manager_ip):
     r = requests.get("http://" + manager_ip + '/get_managers')
     return r.json()['managers']
 
+def socket_server(port):
+    host = socket.gethostname()
+    server_socket = socket.socket()
+    server_socket.bind((host, port))
+
+    server_socket.listen(5)
+    conn, address = server_socket.accept()
+    return
+
+
 def main(manager_ip):
+    socket_server(PORT_KNOCKING_WITH_MANAGER)
     while True:
         try:
             managers = get_managers(manager_ip)

@@ -25,6 +25,7 @@ def create_ec2(security_group_id, image_id, instance_type, user_data, instance_n
         create_instance_profile(instance_profile_name)
 
     time.sleep(WAIT_FOR_INSTANCE_PROFILE)
+    print("executing run_instances")
     instance = ec2_client.run_instances(
         ImageId=image_id,
         MinCount=1,
@@ -47,11 +48,13 @@ def create_ec2(security_group_id, image_id, instance_type, user_data, instance_n
         KeyName='shahartest',   # TODO: delete
         IamInstanceProfile={"Name": instance_profile_name} if instance_profile else {}
     )
-
+    print("Waiting for instance to be running")
     ec2_client.get_waiter('instance_running').wait(InstanceIds=[instance['Instances'][0]['InstanceId']])
+
     print("Created ec2 instance %s" % instance_name)
     instance = ec2_client.describe_instances(InstanceIds=[instance['Instances'][0]['InstanceId']])
     instance = instance['Reservations'][0]['Instances'][0]
+
     if check_for_remote_port:
         print("Waiting for port %d to be open" % check_for_remote_port)
 
