@@ -1,11 +1,12 @@
+import json
+
 import boto3
 import ipaddress
 
 session = boto3.Session() # add support of keys
 ec2_client = session.client('ec2', region_name='us-east-1')
-
-
-def create_ec2(security_group_id, image_id, instance_type, user_data, instance_name, die_on_shutdown=False, wait=True):
+iam_client = session.client("iam")
+def create_ec2(security_group_id, image_id, instance_type, user_data, instance_name, instance_profile="", die_on_shutdown=False, wait=True):
     instance = ec2_client.run_instances(
         ImageId=image_id,
         MinCount=1,
@@ -25,7 +26,8 @@ def create_ec2(security_group_id, image_id, instance_type, user_data, instance_n
                 ]
             },
         ],
-        KeyName='shahartest'   # TODO: delete
+        KeyName='shahartest',   # TODO: delete
+        IamInstanceProfile={ "Name": instance_profile} if instance_profile else {}
     )
 
     if wait:
@@ -87,6 +89,33 @@ def get_available_private_ipv4():
     ip_range = '172.31.0.0/16'  # Specify the IP range of the default VPC
     all_ips = ipaddress.IPv4Network(ip_range)
     return [str(ip) for ip in all_ips.hosts() if str(ip) not in existing_ips]
+
+def create_instance_profile(role_name):
+    trust_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": "ec2.amazonaws.com"
+                },
+                "Action": "sts:AssumeRole"
+            }
+        ]
+    }
+
+    # Create the role
+    response = iam_client.create_role(
+        RoleName=role_name,
+        AssumeRolePolicyDocument=json.dumps(trust_policy),
+        Description='Role for EC2 instances to create other instances'
+    )
+
+    # Attach necessary permissions to the role
+    response = iam_client.attach_role_policy(
+        RoleName=role_name,
+        PolicyArn='arn:aws:iam::aws:policy/AmazonEC2FullAccess'
+    )
 
 if __name__ == '__main__':
     print(get_available_private_ipv4()[0])
