@@ -33,9 +33,6 @@ WORKERS = []
 killing_list = []
 SIBLINGS = []
 
-# Change in worker also
-PORT_KNOCKING_WITH_WORKER = 5000
-
 def get_results(n):
     results_to_return = []
     while not RESULTS.empty() and len(results_to_return) < n:
@@ -64,8 +61,7 @@ def spawn_worker():
         return
 
     WORKERS.append(create_ec2(SECURITY_GROUP, 'ami-02396cdd13e9a1257', 't2.micro',
-                              WORKER_USER_DATA % get_ip_address(), instance_name="worker",
-                              check_for_remote_port=PORT_KNOCKING_WITH_WORKER))
+                              WORKER_USER_DATA % get_ip_address(), instance_name="worker"))
 
 def kill_worker():
     if len(WORKERS) <= MIN_NUMBER_OF_WORKERS:
