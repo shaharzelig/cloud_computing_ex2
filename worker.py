@@ -9,7 +9,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] %(message)s',
-                    handlers=[logging.StreamHandler()], filename='/var/log/worker.log')
+                    filename='/var/log/worker.log')
 logger = logging.getLogger(__name__)
 TIME_TO_SLEEP_BETWEEN_TASK_REQUESTS = 1
 

@@ -14,7 +14,7 @@ app = Flask(__name__)
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] %(message)s',
-                    handlers=[logging.StreamHandler()], filename='/var/log/manager.log')
+                    filename='/var/log/manager.log')
 
 RESULTS = queue.Queue()
 JOBS = queue.Queue()
