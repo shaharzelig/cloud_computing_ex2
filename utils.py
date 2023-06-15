@@ -45,7 +45,6 @@ def create_ec2(security_group_id, image_id, instance_type, user_data, instance_n
                 ]
             },
         ],
-        KeyName='shahartest',   # TODO: delete
         IamInstanceProfile={"Name": instance_profile_name} if instance_profile else {}
     )
     print("Waiting for instance to be running")
@@ -92,13 +91,7 @@ def create_security_group(security_group_name, endpoint_port):
                 'FromPort': endpoint_port,
                 'ToPort': endpoint_port,
                 'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
-            },
-        {
-            'IpProtocol': 'tcp',
-            'FromPort': 22,
-            'ToPort': 22,
-            'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
-        }
+            }
         ]
     )
 
@@ -184,8 +177,3 @@ def create_instance_profile(instance_profile_name):
     print("Adding role %s to instance profile %s" % (EC2_ADMIN, instance_profile_name))
     iam_client.add_role_to_instance_profile(InstanceProfileName=instance_profile_name,
                                             RoleName=EC2_ADMIN)
-
-
-if __name__ == '__main__':
-    print(get_available_private_ipv4()[0])
-    print(create_security_group('shahar-teststsertr', 1234))
