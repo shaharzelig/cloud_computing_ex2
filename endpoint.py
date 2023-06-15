@@ -14,7 +14,7 @@ app = Flask(__name__)
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] %(message)s',
-                    handlers=[logging.StreamHandler()])
+                    handlers=[logging.StreamHandler()], filename='/var/log/manager.log')
 
 RESULTS = queue.Queue()
 JOBS = queue.Queue()
@@ -37,7 +37,7 @@ SIBLINGS = []
 def get_results(n):
     results_to_return = []
     while not RESULTS.empty() and len(results_to_return) < n:
-        results_to_return.append(RESULTS.get())
+        results_to_return.append(RESULTS.get_nowait())
     app.logger.info("Got %d results" % len(results_to_return))
     return results_to_return
 
@@ -163,7 +163,7 @@ def pull_completed():
                 r = requests.post('http://{}/pullCompleted?top={}'.format(sibling, top - len(results)))
 
                 app.logger.info("Adding %s 's results")
-                results.extend(r.json())
+                results += r.json()["results"]
 
             except Exception:
                 app.logger.warning("Failed to get results from sibling %s" % sibling)

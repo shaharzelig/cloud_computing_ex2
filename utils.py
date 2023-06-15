@@ -1,4 +1,6 @@
 import json
+import time
+import uuid
 
 import boto3
 import ipaddress
@@ -9,10 +11,17 @@ iam_client = session.client("iam")
 
 INSTANCE_PROFILE_NAME = "shahar_instance_profile5"
 EC2_ADMIN = "ec2-admin"
+WAIT_FOR_INSTANCE_PROFILE = 10
+def create_ec2(security_group_id, image_id, instance_type, user_data, instance_name,
+               instance_profile=False,
+               die_on_shutdown=False):
 
-def create_ec2(security_group_id, image_id, instance_type, user_data, instance_name, instance_profile=False,
-               die_on_shutdown=False, wait=True):
+    print("Creating ec2 instance %s" % instance_name)
+    if instance_profile:
+        instance_profile_name = "instance-profile-" + uuid.uuid4().hex
+        create_instance_profile(instance_profile_name)
 
+    time.sleep(WAIT_FOR_INSTANCE_PROFILE)
     instance = ec2_client.run_instances(
         ImageId=image_id,
         MinCount=1,
@@ -33,20 +42,23 @@ def create_ec2(security_group_id, image_id, instance_type, user_data, instance_n
             },
         ],
         KeyName='shahartest',   # TODO: delete
-        IamInstanceProfile={"Name": instance_profile} if instance_profile else {}
+        IamInstanceProfile={"Name": instance_profile_name} if instance_profile else {}
     )
 
-    if wait:
-        ec2_client.get_waiter('instance_running').wait(InstanceIds=[instance['Instances'][0]['InstanceId']])
-
-    ec2_client.associate_iam_instance_profile(IamInstanceProfile={"Name": INSTANCE_PROFILE_NAME},
-                                              InstanceId=instance['Instances'][0]['InstanceId'])
+    ec2_client.get_waiter('instance_running').wait(InstanceIds=[instance['Instances'][0]['InstanceId']])
+    print("Created ec2 instance %s" % instance_name)
     return instance
 
 
 def create_security_group(security_group_name, endpoint_port):
-    security_group = ec2_client.create_security_group(GroupName=security_group_name,
+    sec_group_names = [sec_group['GroupName'] for sec_group in ec2_client.describe_security_groups()['SecurityGroups']]
+    if security_group_name not in sec_group_names:
+        security_group = ec2_client.create_security_group(GroupName=security_group_name,
                                                       Description='Port %d from outside.' % endpoint_port)
+    else:
+        security_group = ec2_client.describe_security_groups(GroupNames=[security_group_name])['SecurityGroups'][0]
+        return security_group['GroupId']
+
     ec2_client.authorize_security_group_ingress(GroupId=security_group['GroupId'], IpPermissions=[
             {
                 'IpProtocol': 'tcp',
@@ -100,7 +112,12 @@ def get_available_private_ipv4():
     return [str(ip) for ip in all_ips.hosts() if str(ip) not in existing_ips]
 
 def create_ec2_admin_role():
-    role_name = "ec2_admin"
+    print("Creating role %s" % EC2_ADMIN)
+    roles = iam_client.list_roles()
+    if any([role["RoleName"] == EC2_ADMIN for role in roles["Roles"]]):
+        print("Role exists")
+        return
+
     trust_policy = {
         "Version": "2012-10-17",
         "Statement": [
@@ -114,22 +131,32 @@ def create_ec2_admin_role():
         ]
     }
 
-    # Create the role
+    print("Creating role and attaching it AmazonEC2FullAcess policy")
     response = iam_client.create_role(
-        RoleName=role_name,
+        RoleName=EC2_ADMIN,
         AssumeRolePolicyDocument=json.dumps(trust_policy),
         Description='Role for EC2 instances to create other instances'
     )
 
     # Attach necessary permissions to the role
     response = iam_client.attach_role_policy(
-        RoleName=role_name,
+        RoleName=EC2_ADMIN,
         PolicyArn='arn:aws:iam::aws:policy/AmazonEC2FullAccess'
     )
+
+
 def create_instance_profile(instance_profile_name):
-    iam_client.create_instance_profile(InstanceProfileName=instance_profile_name)
+    print("Creating instance profile %s" % instance_profile_name)
+    instance_profiles = iam_client.list_instance_profiles()
+    if not any([ip["InstanceProfileName"] == instance_profile_name for ip in instance_profiles['InstanceProfiles']]):
+        iam_client.create_instance_profile(InstanceProfileName=instance_profile_name)
+        iam_client.get_waiter('instance_profile_exists').wait(InstanceProfileName=instance_profile_name)
+
+    create_ec2_admin_role()
+
+    print("Adding role %s to instance profile %s" % (EC2_ADMIN, instance_profile_name))
     iam_client.add_role_to_instance_profile(InstanceProfileName=instance_profile_name,
-                                            RoleName="ec2_admin")
+                                            RoleName=EC2_ADMIN)
 
 if __name__ == '__main__':
     print(get_available_private_ipv4()[0])
