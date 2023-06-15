@@ -2,33 +2,50 @@
 import os
 import sys
 import itertools
+import time
+
 import requests
+import logging
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s [%(levelname)s] %(message)s',
+                    handlers=[logging.StreamHandler()])
+logger = logging.getLogger(__name__)
+TIME_TO_SLEEP_BETWEEN_TASK_REQUESTS = 1
+
 
 def doWork(buffer, iterations):
     import hashlib
     output = hashlib.sha512(buffer).digest()
-    for i in range(iterations - 1):
+    for i in range(iterations - 2):
         output = hashlib.sha512(output).digest()
-    return output
+    return hashlib.sha512(output).hexdigest()
 
 
 def bye():
     while True:
-        os.system("sudo shutdown -h now")
+        # os.system("sudo shutdown -h now")
+        continue
 
 def send_response_to_all_managers(managers, response):
     for manager_url in managers:
-        requests.post(manager_url + '/pushResult', data=response)
+        logger.info("Sending response %s to %s" % (response, manager_url))
+        data = {"result": response}
+        requests.post("http://" + manager_url + '/pushResult',json=data)
 
 
 def get_task(manager_urls):
     for manager_url in itertools.cycle(manager_urls):
-        response = requests.get(manager_url + '/getwork')
+        time.sleep(TIME_TO_SLEEP_BETWEEN_TASK_REQUESTS)
+        logger.info("Getting task from %s" % manager_url)
+        response = requests.get("http://" + manager_url + '/getwork')
 
         if response.status_code == 400:
+            logger.warning("Got 400 from %s, shutting down" % manager_url)
             bye()
 
         if response.status_code == 204: # No content. No work to do.
+            logger.info("Got 204 from %s, no work to do" % manager_url)
             continue
 
         buffer = response.content
