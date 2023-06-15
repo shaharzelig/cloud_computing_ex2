@@ -1,4 +1,6 @@
-from utils import create_ec2,create_security_group, create_instance_profile
+import time
+import requests
+from utils import create_ec2, create_security_group, is_remote_tcp_port_open
 
 ENDPOINT_USER_DATA = '''#!/bin/bash
         sudo yum update -y
@@ -12,20 +14,49 @@ ENDPOINT_USER_DATA = '''#!/bin/bash
         sudo python3 endpoint.py --security-group %s'''
 
 
+def block_until_ports_are_open(sockets):
+    closed_sockets = [socket for socket in sockets if not is_remote_tcp_port_open(socket[0], socket[1])]
+    while len(closed_sockets) > 0:
+        closed_sockets = [socket for socket in sockets if not is_remote_tcp_port_open(socket[0], socket[1])]
+        time.sleep(5)
+
+
+def create_endpoint(name, security_group):
+    endpoint_a = create_ec2(security_group, 'ami-02396cdd13e9a1257', 't2.micro',
+                            ENDPOINT_USER_DATA % security_group, instance_name=name,
+                            instance_profile=True)
+    ip_a = endpoint_a["PublicIpAddress"]
+    ip_a_private = endpoint_a["PrivateIpAddress"]
+
+    return ip_a, ip_a_private
+
+
+def make_them_siblings(public_ips, private_ips):
+    for public_ip in public_ips:
+        url = "http://{}/register_sibling?sibling=".format(public_ip)
+        for private_ip in private_ips:
+            print("Registring sibling: " + url + private_ip)
+            r = requests.post(url + private_ip)
+
+
 def main():
     security_group = create_security_group('shahara', 80)
 
-    # Be aware that create_ec2() always uses 'us-east-1' region, so it might affect image name.
-    endpoint_a = create_ec2(security_group, 'ami-02396cdd13e9a1257', 't2.micro',
-                            ENDPOINT_USER_DATA % security_group, instance_name="endpoint_a",
-                            instance_profile=True)
-    print(endpoint_a)
+    endpoint_a_public_ip, endpoint_a_private_ip = create_endpoint("endpoint_a", security_group)
+    endpoint_b_public_ip, endpoint_b_private_ip = create_endpoint("endpoint_b", security_group)
 
-    endpoint_b = create_ec2(security_group, 'ami-02396cdd13e9a1257', 't2.micro',
-                            ENDPOINT_USER_DATA % security_group, instance_name="endpoint_b",
-                            instance_profile=True)
-    print(endpoint_b)
 
+    print("Waiting for ports")
+    block_until_ports_are_open([(endpoint_a_public_ip, 80), (endpoint_b_public_ip, 80)])
+
+    print("public address a: " + endpoint_a_public_ip)
+    print("private address a: " + endpoint_a_private_ip)
+    print("public address b: " + endpoint_b_public_ip)
+    print("private address b: " + endpoint_b_private_ip)
+
+    print("Make them siblings")
+    make_them_siblings([endpoint_a_public_ip, endpoint_b_public_ip],
+                       [endpoint_a_private_ip, endpoint_b_private_ip])
 
 if __name__ == '__main__':
     main()
