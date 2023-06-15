@@ -27,11 +27,10 @@ def bye():
         # os.system("sudo shutdown -h now")
         continue
 
-def send_response_to_all_managers(managers, response):
-    for manager_url in managers:
-        logger.info("Sending response %s to %s" % (response, manager_url))
-        data = {"result": response}
-        requests.post("http://" + manager_url + '/pushResult',json=data)
+def send_response_to_manager(manager_url, response):
+    logger.info("Sending response %s to %s" % (response, manager_url))
+    data = {"result": response}
+    requests.post("http://" + manager_url + '/pushResult',json=data)
 
 
 def get_task(manager_urls):
@@ -56,15 +55,13 @@ def get_task(manager_urls):
         except Exception as e:
             continue
 
-        yield buffer, iterations
+        yield buffer, iterations, manager_url
 
 
 def main(args):
-    for buffer, iterations in get_task(args):
+    for buffer, iterations, manager_url in get_task(args):
         result = doWork(buffer, iterations)
-
-        # Publish result to everyone
-        send_response_to_all_managers(args, result)
+        send_response_to_manager(manager_url, result)
 
 
 if __name__ == '__main__':

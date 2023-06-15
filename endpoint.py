@@ -155,6 +155,10 @@ def pull_completed():
 
     results = get_results(top)
 
+    # Don't do ping pong
+    if request.remote_addr in SIBLINGS:
+        return jsonify({"results": results}), 200
+
     if len(results) < top:
         app.logger.info("Not enough results (got %d, top=%d), asking siblings" % (len(results), top))
         for sibling in SIBLINGS:
@@ -162,7 +166,7 @@ def pull_completed():
             try:
                 r = requests.post('http://{}/pullCompleted?top={}'.format(sibling, top - len(results)))
 
-                app.logger.info("Adding %s 's results")
+                app.logger.info("Adding %s 's results" % sibling)
                 results += r.json()["results"]
 
             except Exception:
