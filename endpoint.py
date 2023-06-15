@@ -62,7 +62,7 @@ def spawn_worker():
         return
 
     WORKERS.append(create_ec2(SECURITY_GROUP, 'ami-02396cdd13e9a1257', 't2.micro',
-                              WORKER_USER_DATA % ",".join(SIBLINGS), instance_name="worker"))
+                              WORKER_USER_DATA % get_ip_address(), instance_name="worker"))
 
 def kill_worker():
     if len(WORKERS) <= MIN_NUMBER_OF_WORKERS:
