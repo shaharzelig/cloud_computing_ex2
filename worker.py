@@ -13,7 +13,6 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 TIME_TO_SLEEP_BETWEEN_TASK_REQUESTS = 1
 
-
 def doWork(buffer, iterations):
     import hashlib
     output = hashlib.sha512(buffer).digest()
@@ -24,7 +23,7 @@ def doWork(buffer, iterations):
 
 def bye():
     while True:
-        # os.system("sudo shutdown -h now")
+        os.system("sudo shutdown -h now")
         continue
 
 def send_response_to_manager(manager_ip, response):
