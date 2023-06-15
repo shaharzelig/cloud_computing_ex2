@@ -33,8 +33,14 @@ WORKERS = []
 killing_list = []
 SIBLINGS = []
 
+
 def get_results(n):
-    return RESULTS.get(n)
+    results_to_return = []
+    while not RESULTS.empty() and len(results_to_return) < n:
+        results_to_return.append(RESULTS.get())
+    app.logger.info("Got %d results" % len(results_to_return))
+    return results_to_return
+
 
 WORKER_USER_DATA = '''#!/bin/bash
             sudo yum update -y
@@ -72,7 +78,7 @@ def kill_worker():
 
 def compute_avg():
     history = list(get_work_history)
-    if not history:
+    if len(history) < 2:
         return 0
 
     history.sort()
@@ -84,6 +90,7 @@ def workers_manager():
     app.logger.info("Starting workers manager")
     while True:
         time.sleep(MANAGER_INTERVAL)
+        app.logger.info("Currently having %d workers" % len(WORKERS))
         app.logger.info("Checking if need to spawn or kill workers")
         avg = compute_avg()
         if len(WORKERS) < MIN_NUMBER_OF_WORKERS:
@@ -104,7 +111,7 @@ def enqueue():
     except:
         return abort(400, 'iterations must be provided')
     JOBS.put_nowait((request.data, iterations))
-    return "Success", 200
+    return jsonify({"status": "success"}), 200
 
 
 @app.route('/getwork', methods=['GET'])
@@ -117,14 +124,24 @@ def get_work():
     now = time.time()
     get_work_history.append(now)
 
+    if JOBS.empty():
+        return jsonify({"status": "no jobs"}), 204
+
     job = JOBS.get()
     resp = flask.Response(job[0])
     resp.headers['X-Iterations'] = job[1]
-    return resp
+    return resp, 200
 
 @app.route('/pushResult', methods=['POST'])
-def push_result(result):
+def push_result():
+    result_json = request.get_json()
+    if "result" not in result_json.keys():
+        return abort(400, 'result must be provided')
+
+    app.logger.info("Got result %s" % result_json)
+    result = result_json["result"]
     RESULTS.put_nowait(result)
+    return jsonify({"status": "success"}), 200
 
 @app.route('/pullCompleted', methods=['POST'])
 def pull_completed():
@@ -133,19 +150,26 @@ def pull_completed():
 
     # not just ValueError.
     except Exception:
+        app.logger.warning("Got invalid top for pullCompleted")
         return abort(400, 'top must be a valid integer')
 
     results = get_results(top)
+
     if len(results) < top:
+        app.logger.info("Not enough results (got %d, top=%d), asking siblings" % (len(results), top))
         for sibling in SIBLINGS:
+            app.logger.info("Asking sibling %s" % sibling)
             try:
                 r = requests.post('http://{}/pullCompleted?top={}'.format(sibling, top - len(results)))
+
+                app.logger.info("Adding %s 's results")
                 results.extend(r.json())
 
             except Exception:
-                pass
+                app.logger.warning("Failed to get results from sibling %s" % sibling)
+                continue
 
-    return "\n".join(results)
+    return jsonify({"results": results}), 200
 
 
 @app.route('/register_sibling', methods=['POST'])
