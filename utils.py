@@ -1,4 +1,5 @@
 import json
+import socket
 import time
 import uuid
 
@@ -12,9 +13,11 @@ iam_client = session.client("iam")
 INSTANCE_PROFILE_NAME = "shahar_instance_profile5"
 EC2_ADMIN = "ec2-admin"
 WAIT_FOR_INSTANCE_PROFILE = 10
+TIME_TO_SLEEP_BETWEEN_SYNS = 5
+
 def create_ec2(security_group_id, image_id, instance_type, user_data, instance_name,
                instance_profile=False,
-               die_on_shutdown=False):
+               die_on_shutdown=False, check_for_remote_port=None):
 
     print("Creating ec2 instance %s" % instance_name)
     if instance_profile:
@@ -47,7 +50,22 @@ def create_ec2(security_group_id, image_id, instance_type, user_data, instance_n
 
     ec2_client.get_waiter('instance_running').wait(InstanceIds=[instance['Instances'][0]['InstanceId']])
     print("Created ec2 instance %s" % instance_name)
+    instance = ec2_client.describe_instances(InstanceIds=[instance['Instances'][0]['InstanceId']])
+    instance = instance['Reservations'][0]['Instances'][0]
+    if check_for_remote_port:
+        print("Waiting for port %d to be open" % check_for_remote_port)
+
+        while not is_remote_tcp_port_open(instance['PublicIpAddress'], check_for_remote_port):
+            time.sleep(TIME_TO_SLEEP_BETWEEN_SYNS)
+
+        print("Port %d is open" % check_for_remote_port)
     return instance
+
+def is_remote_tcp_port_open(remote_addr, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    result = sock.connect_ex((remote_addr, port))
+    sock.close()
+    return result == 0
 
 
 def create_security_group(security_group_name, endpoint_port):
@@ -157,6 +175,7 @@ def create_instance_profile(instance_profile_name):
     print("Adding role %s to instance profile %s" % (EC2_ADMIN, instance_profile_name))
     iam_client.add_role_to_instance_profile(InstanceProfileName=instance_profile_name,
                                             RoleName=EC2_ADMIN)
+
 
 if __name__ == '__main__':
     print(get_available_private_ipv4()[0])
