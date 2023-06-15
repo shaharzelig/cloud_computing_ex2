@@ -27,42 +27,55 @@ def bye():
         # os.system("sudo shutdown -h now")
         continue
 
-def send_response_to_manager(manager_url, response):
-    logger.info("Sending response %s to %s" % (response, manager_url))
+def send_response_to_manager(manager_ip, response):
+    logger.info("Sending response %s to %s" % (response, manager_ip))
     data = {"result": response}
-    requests.post("http://" + manager_url + '/pushResult',json=data)
+    requests.post("http://" + manager_ip + '/pushResult', json=data)
 
 
-def get_task(manager_urls):
-    for manager_url in itertools.cycle(manager_urls):
-        time.sleep(TIME_TO_SLEEP_BETWEEN_TASK_REQUESTS)
-        logger.info("Getting task from %s" % manager_url)
-        response = requests.get("http://" + manager_url + '/getwork')
+def get_task(manager_ip):
+    time.sleep(TIME_TO_SLEEP_BETWEEN_TASK_REQUESTS)
+    logger.info("Getting task from %s" % manager_ip)
+    response = requests.get("http://" + manager_ip + '/getwork')
 
-        if response.status_code == 400:
-            logger.warning("Got 400 from %s, shutting down" % manager_url)
-            bye()
+    if response.status_code == 400:
+        logger.warning("Got 400 from %s, shutting down" % manager_ip)
+        bye()
 
-        if response.status_code == 204: # No content. No work to do.
-            logger.info("Got 204 from %s, no work to do" % manager_url)
-            continue
+    if response.status_code == 204: # No content. No work to do.
+        logger.info("Got 204 from %s, no work to do" % manager_ip)
+        return
 
-        buffer = response.content
+    buffer = response.content
+    try:
+        iterations = int(response.headers.get('X-Iterations'))
+
+    # A bad response, let's not stop everything because of that.
+    except Exception as e:
+        return
+
+    return buffer, iterations
+
+def get_managers(manager_ip):
+    r = requests.get("http://" + manager_ip + '/get_managers')
+    return r.json()['managers']
+
+def main(manager_ip):
+    while True:
         try:
-            iterations = int(response.headers.get('X-Iterations'))
+            managers = get_managers(manager_ip)
 
-        # A bad response, let's not stop everything because of that.
+            for manager_ip in managers:
+                buffer, iterations = get_task(manager_ip)
+                result = doWork(buffer, iterations)
+                send_response_to_manager(manager_ip, result)
+
         except Exception as e:
+            # Nothing will kill me!
             continue
 
-        yield buffer, iterations, manager_url
 
-
-def main(args):
-    for buffer, iterations, manager_url in get_task(args):
-        result = doWork(buffer, iterations)
-        send_response_to_manager(manager_url, result)
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main(sys.argv[1])

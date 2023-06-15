@@ -8,7 +8,7 @@ import requests
 from flask import Flask, jsonify, abort, request
 import argparse
 from collections import deque
-from utils import create_ec2
+from utils import create_ec2, get_ip_address
 import logging
 app = Flask(__name__)
 
@@ -64,7 +64,6 @@ def spawn_worker():
     WORKERS.append(create_ec2(SECURITY_GROUP, 'ami-02396cdd13e9a1257', 't2.micro',
                               WORKER_USER_DATA % ",".join(SIBLINGS), instance_name="worker"))
 
-
 def kill_worker():
     if len(WORKERS) <= MIN_NUMBER_OF_WORKERS:
         app.logger.info("Can't kill more workers, reached min number of workers %d" %
@@ -103,6 +102,11 @@ def workers_manager():
 
         elif avg < GOOD_THREASHOLD_BEFORE_KILL:
             kill_worker()  # This method should block until worker is killed.
+
+@app.route('/get_managers', methods=['get'])
+def get_managers():
+    current_ip = get_ip_address()
+    return jsonify({"managers": SIBLINGS + [current_ip]}), 200
 
 @app.route('/enqueue', methods=['PUT'])
 def enqueue():

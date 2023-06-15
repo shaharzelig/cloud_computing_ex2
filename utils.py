@@ -61,6 +61,12 @@ def create_ec2(security_group_id, image_id, instance_type, user_data, instance_n
         print("Port %d is open" % check_for_remote_port)
     return instance
 
+
+def get_ip_address():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    return s.getsockname()[0]
+
 def is_remote_tcp_port_open(remote_addr, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result = sock.connect_ex((remote_addr, port))
