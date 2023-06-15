@@ -31,12 +31,10 @@ def create_endpoint(name, security_group):
     return ip_a, ip_a_private
 
 
-def make_them_siblings(public_ips, private_ips):
-    for public_ip in public_ips:
-        url = "http://{}/register_sibling?sibling=".format(public_ip)
-        for private_ip in private_ips:
-            print("Registring sibling: " + url + private_ip)
-            r = requests.post(url + private_ip)
+def make_them_siblings(public_ip, private_ip):
+    url = "http://{}/register_sibling?sibling={}".format(public_ip, private_ip)
+    print("Registering sibling: " + url + private_ip)
+    r = requests.post(url)
 
 
 def main():
@@ -55,8 +53,9 @@ def main():
     print("private address b: " + endpoint_b_private_ip)
 
     print("Make them siblings")
-    make_them_siblings([endpoint_a_public_ip, endpoint_b_public_ip],
-                       [endpoint_a_private_ip, endpoint_b_private_ip])
+    make_them_siblings(endpoint_a_public_ip, endpoint_b_private_ip)
+    make_them_siblings(endpoint_b_public_ip, endpoint_a_private_ip)
+
 
 if __name__ == '__main__':
     main()
